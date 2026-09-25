@@ -169,7 +169,10 @@ h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
    wall rule, same containment test as the desktop app. */
 
 .demo {
-  margin-top: 40px;
+  /* The bottom one was missing, so the only thing between the demo and the
+     section under it was the demo's own padding. 48px lines up with the
+     rhythm the rest of the page uses between blocks. */
+  margin: 40px 0 48px;
   display: grid;
   gap: 18px;
   border: 1px solid var(--line);
