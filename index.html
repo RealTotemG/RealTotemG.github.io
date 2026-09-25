@@ -182,7 +182,13 @@ h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
   box-shadow: var(--shadow);
 }
 @media (min-width: 880px) {
-  .demo { grid-template-columns: minmax(0, 1fr) 300px; gap: 22px; align-items: start; }
+  .demo { grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; align-items: start; }
+  /* Fifteen items is a long list, and a panel that grows to fit it leaves
+     the canvas stranded at the top of a very tall box. The real inspector
+     is a column that scrolls, so this one is too. Only beside the canvas:
+     stacked on a phone, a scrolling panel inside a scrolling page is a
+     fight nobody wins. */
+  .demo-panel { max-height: 560px; overflow-y: auto; }
 }
 
 #room {
@@ -207,6 +213,13 @@ h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
    lands a thumb on it cannot scroll past the first screen. Sideways drags
    still move a container, which is enough to see the idea. */
 @media (pointer: coarse) { #room { touch-action: pan-y; } }
+
+/* A flex item will not shrink below its content's minimum width unless it is
+   told it may, and a text input's minimum is its default size attribute,
+   about twenty characters. Without this the item rows push the panel wider
+   than the panel and it scrolls sideways. */
+.demo-panel > * { min-width: 0; max-width: 100%; }
+.demo-items, .demo-items li { min-width: 0; }
 
 .demo-panel {
   border: 1px solid var(--line);
@@ -303,7 +316,7 @@ h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
   border-radius: 6px; padding: 5px 4px 5px 7px; cursor: pointer;
   min-width: 0; flex: 1;
 }
-.demo-tier { flex: none; width: 82px; font-size: 11.5px; }
+.demo-tier { flex: none; width: 74px; font-size: 11.5px; }
 
 .demo-addform { display: grid; gap: 8px; }
 
@@ -313,7 +326,23 @@ h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
   border: 0; padding: 0; cursor: pointer;
 }
 .demo-item-dot:hover { box-shadow: 0 0 0 2px var(--raise), 0 0 0 3.5px var(--text); }
-.demo-item-name { flex: 1; }
+.demo-item-name {
+  /* flex-basis 0 with width 0, the pair that actually makes an input shrink. */
+  flex: 1 1 0; width: 0; min-width: 0;
+  font: inherit; font-size: 13px; color: var(--text);
+  background: transparent; border: 1px solid transparent;
+  border-radius: 5px; padding: 2px 5px; margin: -2px 0;
+}
+.demo-item-name:hover { border-color: var(--line-2); }
+.demo-item-name:focus { background: var(--sunk); border-color: var(--accent); outline: none; }
+
+.demo-remove {
+  flex: none; width: 20px; height: 20px; padding: 0;
+  font: inherit; font-size: 15px; line-height: 1;
+  color: var(--faint); background: transparent;
+  border: 1px solid transparent; border-radius: 5px; cursor: pointer;
+}
+.demo-remove:hover { color: var(--danger, #f2555a); border-color: var(--line-2); }
 
 /* ---- sections ----------------------------------------------------------- */
 
@@ -690,8 +719,8 @@ footer nav a { font-size: 14px; }
   const ctx = canvas.getContext("2d");
 
   const REPO = "https://github.com/RealTotemG/Invenfloor";
-  const MAX_CONTAINERS = 3;
-  const MAX_ITEMS = 3;
+  const MAX_CONTAINERS = 5;
+  const MAX_ITEMS = 15;
   const MAX_TIERS = 5;
 
   const COS30 = Math.cos(Math.PI / 6);
@@ -752,7 +781,8 @@ footer nav a { font-size: 14px; }
 
   let selectedId = containers[0].id;
   let dragging = null;
-  let adding = false;
+  let adding = false;              // is the add-item row open
+  let notice = "";                 // one thing to tell the user, shown once
   let addColor = SWATCHES[2];
   let scale = 1, originX = 0, originY = 0;
 
@@ -1084,6 +1114,8 @@ footer nav a { font-size: 14px; }
   function renderPanel() {
     panel.textContent = "";
     const box = selected();
+    const said = notice;
+    notice = "";
 
     if (!box) {
       panel.append(make("p", "demo-eyebrow", "Nothing selected"),
@@ -1188,7 +1220,17 @@ footer nav a { font-size: 14px; }
               renderPanel();
             });
 
-            const label = make("span", "demo-item-name", item.name);
+            // The name is an input that looks like text until you click it.
+            // A row of obvious boxes would be heavy at fifteen items, and a
+            // click-to-edit dance is a state machine for no gain.
+            const label = make("input", "demo-item-name");
+            label.type = "text";
+            label.value = item.name;
+            label.maxLength = 24;
+            label.setAttribute("aria-label", `Rename ${item.name}`);
+            label.addEventListener("input", () => {
+              item.name = label.value.trim() || "Something";
+            });
 
             const where = make("select", "demo-select demo-tier");
             where.setAttribute("aria-label", `Which tier ${item.name} is on`);
@@ -1203,7 +1245,17 @@ footer nav a { font-size: 14px; }
               renderPanel();
             });
 
-            row.append(dot, label, where);
+            const drop = make("button", "demo-remove", "\u00d7");
+            drop.type = "button";
+            drop.title = "Remove this item";
+            drop.setAttribute("aria-label", `Remove ${item.name}`);
+            drop.addEventListener("click", () => {
+              box.items.splice(box.items.indexOf(item), 1);
+              notice = "";
+              draw(); renderPanel();
+            });
+
+            row.append(dot, label, where, drop);
             list.append(row);
           }
           panel.append(list);
@@ -1250,6 +1302,8 @@ footer nav a { font-size: 14px; }
 
     panel.append(make("div", "demo-rule"));
 
+    if (said) panel.append(make("p", "demo-limit", said));
+
     const more = make("button", "demo-btn", "+ Add container");
     more.type = "button";
     if (containers.length < MAX_CONTAINERS) {
@@ -1284,11 +1338,16 @@ footer nav a { font-size: 14px; }
           containers.push(made);
           selectedId = made.id;
           adding = false;
+          notice = "";
           draw(); renderPanel();
           return;
         }
       }
     }
+    // Every spot on the floor is taken or too tight. Saying so beats a
+    // button that looks alive and does nothing when you press it.
+    notice = "No room left on the floor. Move something first.";
+    renderPanel();
   }
 
   /* -- picking and dragging -------------------------------------------------- */
